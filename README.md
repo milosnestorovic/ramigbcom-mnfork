@@ -50,11 +50,17 @@ Drop MP3s into `public/audio/` and list them in `public/audio/tracks.json`:
 [{ "title": "Night shift", "src": "night-shift.mp3", "genre": "Lo-fi" }]
 ```
 
-Each genre becomes one cassette case in the stack on the painted player (right-hand
-shelves). Nothing replaces the artwork: `src/scene/deckArt.ts` draws the stack and an old
-cassette deck's face (door, keys, VU meters, readout, counter) onto that patch of the picture, and `public/scene/player.webp` is a
-sharper copy of the patch for the close-up. Click the player to come close, click a spine
-to load it. The Music button in the corner goes there too. It never autoplays.
+Each genre becomes one cassette in the rack beside the radio (right-hand shelves).
+`src/scene/deckArt.ts` models the radio and the rack as boxes standing square on a shelf along the
+right wall, facing the middle of the room, projects them onto the picture over the painted player
+using the wall's own vanishing point, and draws their fronts (LCD readout, VU meters,
+lit cassette window, volume knob, PLAY / PAUSE / STOP / REW / FF / EJECT keys) flat before
+warping them into place; keys, knobs and the cassette cases are then raised as little boxes.
+Up close the view swings part-way round to the radio's front (`YAW_CLOSE`). Drag the volume
+knob to turn it. The depth map is levelled under them so they stand as one flat card.
+`public/scene/player.webp` is a sharper copy of that patch for the close-up. Click the radio to
+come close, click a spine to load it. The Music button in the corner goes there too. It never
+autoplays.
 The rain/hum ambience is generated in the browser and is also opt-in.
 
 ## Deploy

@@ -117,11 +117,24 @@ export class RoomRenderer {
       /** The glass that shows `board`, a canvas drawn by someone else. */
       info: Quad
       board: HTMLCanvasElement
-      /** The painted tape deck: a sharper `patch` of the picture over `rect`, and `art` drawn on top of it. */
-      deck: { rect: readonly [number, number, number, number]; patch: HTMLImageElement; art: HTMLCanvasElement }
+      /**
+       * The radio: a sharper `patch` of the picture over `rect`, and `art` drawn on top of it.
+       * The art stands as a flat card over `level`, at the depth found at `at`.
+       */
+      deck: {
+        rect: readonly [number, number, number, number]
+        patch: HTMLImageElement
+        art: HTMLCanvasElement
+        /** The patch `art` covers, and the corner of it where the plant's leaves stay in front. */
+        artRect: readonly [number, number, number, number]
+        leaves: readonly [number, number, number, number]
+        level: readonly [number, number, number, number]
+        at: Vec2
+      }
     },
   ) {
     this.depth = DepthField.fromImage(depthImage)
+    this.depth.level(fx.deck.level, fx.deck.at, 10)
     this.renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
     this.renderer.outputColorSpace = LinearSRGBColorSpace
     this.renderer.setClearColor(0x05080a, 1)
@@ -167,6 +180,8 @@ export class RoomRenderer {
       uPatch: { value: patch },
       uDeck: { value: this.deckTexture },
       uDeckRect: { value: new Vector4(dx0 / IMAGE_W, dy0 / IMAGE_H, dx1 / IMAGE_W, dy1 / IMAGE_H) },
+      uArtRect: { value: new Vector4(...unit(fx.deck.artRect)) },
+      uLeaf: { value: new Vector4(...unit(fx.deck.leaves)) },
       uImageSize: { value: new Vector2(IMAGE_W, IMAGE_H) },
       uBlur1: { value: blur1 },
       uBlur2: { value: blur2 },
@@ -502,6 +517,11 @@ function lerpShot(a: Shot, b: Shot, t: number): Shot {
     focusDepth: 1 / (1 / a.focusDepth + (1 / b.focusDepth - 1 / a.focusDepth) * t),
     vignette: a.vignette + (b.vignette - a.vignette) * t,
   }
+}
+
+/** An image-pixel box as fractions of the picture. */
+function unit([x0, y0, x1, y1]: readonly [number, number, number, number]): [number, number, number, number] {
+  return [x0 / IMAGE_W, y0 / IMAGE_H, x1 / IMAGE_W, y1 / IMAGE_H]
 }
 
 function makeCanvas(w: number, h: number): HTMLCanvasElement {

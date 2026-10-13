@@ -32,6 +32,8 @@ uniform sampler2D uInfoMap;
 uniform sampler2D uPatch;
 uniform sampler2D uDeck;
 uniform vec4 uDeckRect;
+uniform vec4 uArtRect;
+uniform vec4 uLeaf;
 uniform vec2 uImageSize;
 uniform sampler2D uBlur1;
 uniform sampler2D uBlur2;
@@ -117,6 +119,7 @@ void main() {
   vec2 dEdge = smoothstep(0.0, 0.07, dq) * smoothstep(0.0, 0.07, 1.0 - dq);
   float inDeck = dEdge.x * dEdge.y;
   col = mix(col, texture2D(uPatch, clamp(dq, 0.0, 1.0)).rgb, inDeck);
+  vec3 sharp = col;
   if (soft > 0.01) {
     vec3 b1 = texture2D(uBlur1, uv).rgb;
     vec3 b2 = texture2D(uBlur2, uv).rgb;
@@ -138,7 +141,13 @@ void main() {
   vec3 board = texture2D(uInfoMap, clamp(is, 0.0, 1.0)).rgb;
   col = mix(col, mix(board, glow, melt), glassMask(is));
   // What is drawn onto the deck: its display, keys, slot and the stack of cassettes.
-  vec4 art = texture2D(uDeck, clamp(dq, 0.0, 1.0)) * inDeck * (1.0 - melt);
+  vec2 aq = (uv - uArtRect.xy) / (uArtRect.zw - uArtRect.xy);
+  vec2 aEdge = smoothstep(0.0, 0.06, aq) * smoothstep(0.0, 0.06, 1.0 - aq);
+  vec4 art = texture2D(uDeck, clamp(aq, 0.0, 1.0)) * aEdge.x * aEdge.y * (1.0 - melt);
+  // The plant stands in front of the shelf: inside uLeaf, wherever the picture is leaf green it stays on top.
+  vec2 lq = (uv - uLeaf.xy) / (uLeaf.zw - uLeaf.xy);
+  float inLeaf = smoothstep(0.0, 0.12, lq.x) * smoothstep(0.0, 0.12, lq.y) * step(lq.x, 1.0) * step(lq.y, 1.0);
+  art *= 1.0 - inLeaf * smoothstep(0.015, 0.07, sharp.g - max(sharp.r * 0.9, sharp.b * 1.12));
   col = col * (1.0 - art.a) + art.rgb;
 
   // Hover: lift the object, let everything else settle back a touch.

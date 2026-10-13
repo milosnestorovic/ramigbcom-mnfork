@@ -10,17 +10,22 @@ export interface PlayerState {
   loaded: number | null
   track: number
   playing: boolean
+  /** Held mid-track by the pause key, as opposed to stopped. */
+  paused: boolean
+  /** 0..1. */
+  volume: number
   /** Seconds into the track, and its length (NaN until known). */
   at: number
   of: number
 }
 
-export type DeckKey = 'rewind' | 'play' | 'stop' | 'forward' | 'eject'
+export type DeckKey = 'play' | 'pause' | 'stop' | 'rewind' | 'forward' | 'eject'
 
 /** Rewind goes to the start of the track; pressed again this early, to the one before. */
 const REWIND_RESTART_S = 3
+const VOLUME = 0.8
 
-let state: PlayerState = { genres: [], loaded: null, track: 0, playing: false, at: 0, of: NaN }
+let state: PlayerState = { genres: [], loaded: null, track: 0, playing: false, paused: false, volume: VOLUME, at: 0, of: NaN }
 const listeners = new Set<() => void>()
 let audio: HTMLAudioElement | null = null
 
@@ -37,7 +42,8 @@ function element(): HTMLAudioElement {
   if (audio) return audio
   const a = new Audio()
   a.preload = 'none'
-  a.addEventListener('play', () => set({ playing: true }))
+  a.volume = state.volume
+  a.addEventListener('play', () => set({ playing: true, paused: false }))
   a.addEventListener('pause', () => set({ playing: false }))
   a.addEventListener('timeupdate', () => set({ at: a.currentTime, of: a.duration }))
   a.addEventListener('ended', () => forward(true))
@@ -47,7 +53,7 @@ function element(): HTMLAudioElement {
 
 /** Point the element at a track. Synchronous, so a following play() keeps the click's user gesture. */
 function cue(loaded: number | null, track: number): void {
-  set({ loaded, track, at: 0, of: NaN })
+  set({ loaded, track, paused: false, at: 0, of: NaN })
   const a = element()
   const tape = currentTape()
   if (tape) a.src = tape.src
@@ -61,8 +67,21 @@ function play(): void {
     .catch(() => set({ playing: false }))
 }
 
+/** Hold the tape where it is; pressed again, let it run. */
+function pause(): void {
+  if (!currentTape()) return
+  if (state.playing) {
+    element().pause()
+    set({ paused: true })
+  } else if (state.paused) play()
+}
+
+/** Stop and wind back to the start of the track. */
 function stop(): void {
-  element().pause()
+  const a = element()
+  a.pause()
+  if (currentTape() && a.currentTime > 0) a.currentTime = 0
+  set({ paused: false, at: 0 })
 }
 
 function forward(keepPlaying = state.playing): void {
@@ -109,10 +128,24 @@ export const player = {
   },
   press(key: DeckKey): void {
     if (key === 'play') play()
+    else if (key === 'pause') pause()
     else if (key === 'stop') stop()
     else if (key === 'rewind') rewind()
     else if (key === 'forward') forward()
     else player.eject()
+  },
+  /** Turn the volume knob by a step: negative is quieter. */
+  turn(by: number): void {
+    const volume = Math.min(1, Math.max(0, Math.round((state.volume + by) * 10) / 10))
+    element().volume = volume
+    set({ volume })
+  },
+  /** Set the volume outright, 0..1: the knob being dragged. */
+  volume(to: number): void {
+    const volume = Math.min(1, Math.max(0, to))
+    if (volume === state.volume) return
+    element().volume = volume
+    set({ volume })
   },
   tape: currentTape,
 }

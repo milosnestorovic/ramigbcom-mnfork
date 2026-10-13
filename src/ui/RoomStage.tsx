@@ -4,7 +4,7 @@ import { player } from '../audio/player'
 import { BOARD_H, BOARD_W, drawBoard } from '../now/board'
 import { getNow, startNow, subscribeNow } from '../now/now'
 import { hitOutline, hitTest, sameHit, type Hit } from '../hit'
-import { DECK_RECT, DeckArt, type DeckTarget } from '../scene/deckArt'
+import { DECK_REACH, DECK_RECT, DeckArt, PATCH_RECT, type DeckTarget } from '../scene/deckArt'
 import { RoomRenderer } from '../scene/RoomRenderer'
 import { maxPan } from '../scene/view'
 import { attachRenderer, closeArea, getPan, openArea, setPan, setReducedMotion } from '../state/controller'
@@ -22,6 +22,11 @@ export interface RoomAssets {
 }
 
 const DRAG_THRESHOLD = 8
+/** The volume knob: pixels of drag from silent to full, and how it behaves when simply held. */
+const KNOB_TRAVEL_PX = 180
+const KNOB_DRAG_PX = 3
+const KNOB_HOLD_MS = 280
+const KNOB_HOLD_RATE = 0.45
 /** Idle tour: quiet time before it starts, one step per period, highlight time per step. */
 const IDLE_MS = 4000
 const TOUR_PERIOD_MS = 5000
@@ -44,7 +49,17 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       saver: MONITOR_SCREEN,
       info: TOP_SCREEN,
       board,
-      deck: { rect: DECK_RECT, patch: assets.player, art: deck.canvas },
+      deck: {
+        rect: PATCH_RECT,
+        artRect: DECK_RECT,
+        // The potted plant in front of the shelf's near end.
+        leaves: [1338, 552, 1430, 620],
+        patch: assets.player,
+        art: deck.canvas,
+        level: [DECK_REACH[0] - 8, DECK_REACH[1] - 8, DECK_REACH[2] + 8, DECK_REACH[3] + 8],
+        // The front of the player that was painted here.
+        at: [1346, 555],
+      },
     })
     const detach = attachRenderer(r)
 
@@ -68,6 +83,8 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
         title: genre?.tapes[s.track]?.title ?? '',
         trackLabel: genre ? `${s.track + 1}/${genre.tapes.length}` : '',
         playing: s.playing,
+        paused: s.paused,
+        volume: s.volume,
         at: s.at,
         of: s.of,
       })
@@ -80,6 +97,8 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       const px = r.pixelAt(x, y)
       return px ? deck.targetAt(px[0], px[1]) : null
     }
+    // The volume knob while it is held: where the pointer went down, and the volume it had then.
+    let knob: { id: number; x: number; y: number; from: number; dir: -1 | 1; since: number; dragged: boolean } | null = null
     // The deck is painted into the picture: repaint its canvas while something on it moves.
     let deckFrame = 0
     let deckThen = performance.now()
@@ -87,7 +106,11 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       deckFrame = requestAnimationFrame(tickDeck)
       const dt = Math.min((now - deckThen) / 1000, 0.1)
       deckThen = now
-      if (deck.update(dt, room.get().area === 'music')) r.refreshDeck()
+      const close = room.get().area === 'music'
+      deck.setTurned(close)
+      // Held on the knob without dragging: it keeps turning the way it was pushed.
+      if (knob && !knob.dragged && now - knob.since > KNOB_HOLD_MS) player.volume(player.get().volume + knob.dir * dt * KNOB_HOLD_RATE)
+      if (deck.update(dt, close)) r.refreshDeck()
     }
     deckFrame = requestAnimationFrame(tickDeck)
 
@@ -143,6 +166,13 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
     const onMove = (e: PointerEvent) => {
       const cursor = cursorRef.current
       if (cursor && e.pointerType === 'mouse') cursor.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`
+      if (knob && knob.id === e.pointerId) {
+        // Up or to the right is louder, like turning it clockwise.
+        const along = e.clientX - knob.x - (e.clientY - knob.y)
+        if (!knob.dragged && Math.abs(along) > KNOB_DRAG_PX) knob.dragged = true
+        if (knob.dragged) player.volume(knob.from + along / KNOB_TRAVEL_PX)
+        return
+      }
       if (e.pointerType === 'mouse') {
         const rect = host.getBoundingClientRect()
         r.setPointer(((e.clientX - rect.left) / rect.width) * 2 - 1, ((e.clientY - rect.top) / rect.height) * 2 - 1)
@@ -171,18 +201,30 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return
+      const target = deckTargetAt(e.clientX, e.clientY)
+      if (target?.kind === 'volume') {
+        knob = { id: e.pointerId, x: e.clientX, y: e.clientY, from: player.get().volume, dir: target.dir, since: performance.now(), dragged: false }
+        host.setPointerCapture(e.pointerId)
+        return
+      }
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY, pan: getPan(), moved: false }
       if (e.pointerType !== 'mouse') host.setPointerCapture(e.pointerId)
     }
 
     const onUp = (e: PointerEvent) => {
+      if (knob && knob.id === e.pointerId) {
+        // A plain click still nudges it one step.
+        if (!knob.dragged && performance.now() - knob.since <= KNOB_HOLD_MS) player.turn(knob.dir * 0.1)
+        knob = null
+        return
+      }
       if (!drag || drag.id !== e.pointerId) return
       const wasDrag = drag.moved
       drag = null
       if (wasDrag) return
       const target = deckTargetAt(e.clientX, e.clientY)
       if (target?.kind === 'tape') player.load(target.index)
-      else if (target) {
+      else if (target?.kind === 'key') {
         deck.tap(target.key)
         player.press(target.key)
       } else activate(hitAt(e.clientX, e.clientY))

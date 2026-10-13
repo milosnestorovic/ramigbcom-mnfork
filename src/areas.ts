@@ -1,3 +1,4 @@
+import { DECK_BOUNDS, DECK_CLOSE, DECK_OUTLINE } from './scene/deckArt'
 import type { Polygon } from './scene/polygon'
 import type { Vec2 } from './scene/space'
 import type { Framing } from './scene/view'
@@ -49,6 +50,11 @@ export const TOP_SCREEN: readonly [Vec2, Vec2, Vec2, Vec2] = [
   [177, 338],
   [126, 340],
 ]
+
+/** The radio and its rack as they stand on the shelf, with a little air around them. */
+const MUSIC = [DECK_BOUNDS[0] - 4, DECK_BOUNDS[1] - 4, DECK_BOUNDS[2] + 4, DECK_BOUNDS[3] + 4] as const
+/** The same once you are up close and the view has swung round to the radio's front. */
+const MUSIC_CLOSE = [DECK_CLOSE[0] - 3, DECK_CLOSE[1] - 3, DECK_CLOSE[2] + 3, DECK_CLOSE[3] + 3] as const
 
 export const AREAS: readonly Area[] = [
   {
@@ -130,12 +136,12 @@ export const AREAS: readonly Area[] = [
     route: '/music',
     label: 'Tape deck',
     hint: 'Pick a cassette, press play',
-    // The painted player with the stack of cassettes on its lid.
-    hotspot: [[1286, 518], [1292, 505], [1314, 496], [1354, 498], [1368, 510], [1382, 530], [1386, 578], [1308, 576], [1310, 540]],
-    outline: [[[1291, 516], [1295, 510], [1316, 511], [1316, 501], [1352, 504], [1362, 511], [1362, 529], [1376, 532], [1378, 538], [1381, 574], [1312, 571], [1315, 536]]],
-    anchor: [1300, 512],
-    wide: { box: [1286, 492, 1390, 580], dolly: 0.35, fill: 0.86, anchor: [0, 0] },
-    narrow: { box: [1286, 492, 1390, 580], dolly: 0.35, fill: 0.98, anchor: [0, -0.2] },
+    // The radio and the rack of cassettes beside it.
+    hotspot: [[MUSIC[0], MUSIC[1]], [MUSIC[2], MUSIC[1]], [MUSIC[2], MUSIC[3]], [MUSIC[0], MUSIC[3]]],
+    outline: DECK_OUTLINE,
+    anchor: [DECK_BOUNDS[0] + 6, DECK_BOUNDS[1] + 12],
+    wide: { box: MUSIC_CLOSE, dolly: 0.35, fill: 0.94, anchor: [0, 0] },
+    narrow: { box: MUSIC_CLOSE, dolly: 0.35, fill: 0.98, anchor: [0, -0.2] },
     panel: 'screen',
     dof: 0.5,
     tint: [1.0, 0.8, 0.5],

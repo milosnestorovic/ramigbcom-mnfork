@@ -4,9 +4,10 @@ import { closeArea, openArea } from '../state/controller'
 import { useRoom } from '../state/store'
 
 const KEYS: readonly [DeckKey, string][] = [
-  ['rewind', 'Rewind'],
   ['play', 'Play'],
+  ['pause', 'Pause'],
   ['stop', 'Stop'],
+  ['rewind', 'Rewind'],
   ['forward', 'Next track'],
   ['eject', 'Eject'],
 ]
@@ -56,7 +57,7 @@ export function Music() {
       </h2>
       <p aria-live="polite">
         {tape && genre
-          ? `${s.playing ? 'Playing' : 'Stopped'}: ${tape.title}, track ${s.track + 1} of ${genre.tapes.length} on the ${genre.name} tape, ${clockText(s.at)} of ${clockText(s.of)}.`
+          ? `${s.playing ? 'Playing' : s.paused ? 'Paused' : 'Stopped'}: ${tape.title}, track ${s.track + 1} of ${genre.tapes.length} on the ${genre.name} tape, ${clockText(s.at)} of ${clockText(s.of)}.`
           : 'No tape in the deck.'}
       </p>
       <ul>
@@ -73,6 +74,12 @@ export function Music() {
           {label}
         </button>
       ))}
+      <button type="button" onClick={() => player.turn(-0.1)} disabled={s.volume <= 0}>
+        Volume down
+      </button>
+      <button type="button" onClick={() => player.turn(0.1)} disabled={s.volume >= 1}>
+        Volume up, now {Math.round(s.volume * 100)}%
+      </button>
     </section>
   )
 }
