@@ -328,12 +328,7 @@ button {
   }
 }
 
-.tape {
-  display: flex;
-  gap: 4px;
-}
-
-.tape__title {
+.music__now {
   max-width: 16ch;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1041,14 +1036,14 @@ button {
   background: radial-gradient(ellipse at 50% 42%, #0d2c31 0%, #07181b 58%, #030b0d 100%);
   color: var(--phosphor);
   font-family: var(--mono);
-  font-size: clamp(10px, 2.05cqw, 15px);
+  font-size: clamp(10px, 2.05cqw, 19px);
   line-height: 1.5;
   text-shadow: 0 0 6px rgba(120, 240, 245, 0.32);
   opacity: 0;
   transition: opacity 420ms ease;
 }
 
-.crt[data-arrived='true'][data-placed='true'] {
+.crt[data-placed='true'] {
   opacity: 1;
 }
 

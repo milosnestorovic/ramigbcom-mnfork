@@ -31,7 +31,7 @@ describe('hotspots', () => {
     expect(hitTest(170, 425)).toEqual({ kind: 'area', id: 'projects' })
     expect(hitTest(200, 850)).toEqual({ kind: 'area', id: 'about' })
     expect(hitTest(900, 700)).toEqual({ kind: 'area', id: 'hobbies' })
-    expect(hitTest(1380, 450)).toEqual({ kind: 'area', id: 'skills' })
+    expect(hitTest(1340, 528)).toEqual({ kind: 'area', id: 'music' })
     expect(hitTest(800, 300)).toEqual({ kind: 'area', id: 'contact' })
     expect(hitTest(610, 580)).toEqual({ kind: 'area', id: 'experiments' })
   })

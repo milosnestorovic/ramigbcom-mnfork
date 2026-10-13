@@ -7,6 +7,7 @@ import {
   LinearFilter,
   LinearMipmapLinearFilter,
   LinearSRGBColorSpace,
+  Matrix3,
   Mesh,
   PerspectiveCamera,
   Scene,
@@ -14,14 +15,19 @@ import {
   Texture,
   Vector2,
   Vector3,
+  Vector4,
   WebGLRenderer,
 } from 'three'
 import { DepthField } from './depthField'
+import { quadToUnitSquare, type Point } from './homography'
 import { pickPixel } from './pick'
 import type { Polygon } from './polygon'
 import { roomFragment, roomVertex } from './shaders'
 import { IMAGE_H, IMAGE_W, pixelToWorld, type Vec2 } from './space'
 import { easeInOutCubic, frustum, lerpView, overviewView, projectToScreen, withParallax, type View } from './view'
+
+type Quad = readonly [Point, Point, Point, Point]
+const inverse = (q: Quad) => new Matrix3().set(...(quadToUnitSquare(q) as Parameters<Matrix3['set']>))
 
 export interface Shot {
   view: View
@@ -53,6 +59,9 @@ const SEG_X = 420
 const SEG_Y = 315
 const MASK_W = 362
 const MASK_H = 272
+/** The hover outline is a thin line, so its mask is finer than the soft ones. */
+const OUTLINE_W = 724
+const OUTLINE_H = 543
 const MAX_DPR = 1.5
 
 export class RoomRenderer {
@@ -65,6 +74,10 @@ export class RoomRenderer {
   private readonly mesh: Mesh
   private readonly hoverCanvas: HTMLCanvasElement
   private readonly hoverTexture: CanvasTexture
+  private readonly outlineCanvas: HTMLCanvasElement
+  private readonly outlineTexture: CanvasTexture
+  private readonly infoTexture: CanvasTexture
+  private readonly deckTexture: CanvasTexture
   private readonly textures: Texture[] = []
   private readonly listeners = new Set<(f: FrameInfo) => void>()
 
@@ -96,7 +109,17 @@ export class RoomRenderer {
     room: HTMLImageElement,
     depthImage: HTMLImageElement,
     blurs: readonly [HTMLImageElement, HTMLImageElement],
-    fx: { screens: readonly Polygon[]; lamp: Polygon },
+    fx: {
+      screens: readonly Polygon[]
+      lamp: Polygon
+      /** The glass that runs the screensaver. */
+      saver: Quad
+      /** The glass that shows `board`, a canvas drawn by someone else. */
+      info: Quad
+      board: HTMLCanvasElement
+      /** The painted tape deck: a sharper `patch` of the picture over `rect`, and `art` drawn on top of it. */
+      deck: { rect: readonly [number, number, number, number]; patch: HTMLImageElement; art: HTMLCanvasElement }
+    },
   ) {
     this.depth = DepthField.fromImage(depthImage)
     this.renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
@@ -115,12 +138,36 @@ export class RoomRenderer {
     const fxTex = this.texture(new CanvasTexture(drawFxMask(fx.screens, fx.lamp)))
     this.hoverCanvas = makeCanvas(MASK_W, MASK_H)
     this.hoverTexture = this.texture(new CanvasTexture(this.hoverCanvas)) as CanvasTexture
+    this.outlineCanvas = makeCanvas(OUTLINE_W, OUTLINE_H)
+    this.outlineTexture = this.texture(new CanvasTexture(this.outlineCanvas)) as CanvasTexture
+    // Seen tiny from across the room and large up close, so it needs mipmaps.
+    this.infoTexture = this.texture(new CanvasTexture(fx.board)) as CanvasTexture
+    this.infoTexture.generateMipmaps = true
+    this.infoTexture.minFilter = LinearMipmapLinearFilter
+    this.infoTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+    const patch = this.texture(new Texture(fx.deck.patch))
+    this.deckTexture = this.texture(new CanvasTexture(fx.deck.art)) as CanvasTexture
+    this.deckTexture.premultiplyAlpha = true
+    for (const t of [patch, this.deckTexture]) {
+      t.generateMipmaps = true
+      t.minFilter = LinearMipmapLinearFilter
+      t.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+    }
+    const [dx0, dy0, dx1, dy1] = fx.deck.rect
 
     this.uniforms = {
       uMap: { value: map },
       uDepth: { value: depthTex },
       uFx: { value: fxTex },
       uHover: { value: this.hoverTexture },
+      uOutline: { value: this.outlineTexture },
+      uSaver: { value: inverse(fx.saver) },
+      uInfo: { value: inverse(fx.info) },
+      uInfoMap: { value: this.infoTexture },
+      uPatch: { value: patch },
+      uDeck: { value: this.deckTexture },
+      uDeckRect: { value: new Vector4(dx0 / IMAGE_W, dy0 / IMAGE_H, dx1 / IMAGE_W, dy1 / IMAGE_H) },
+      uImageSize: { value: new Vector2(IMAGE_W, IMAGE_H) },
       uBlur1: { value: blur1 },
       uBlur2: { value: blur2 },
       uStretch: { value: 0 },
@@ -191,18 +238,35 @@ export class RoomRenderer {
     this.dirty = true
   }
 
-  setHover(poly: Polygon | null, tint: readonly [number, number, number] = [1, 1, 1]): void {
-    if (poly) {
-      const ctx = this.hoverCanvas.getContext('2d')
-      if (ctx) {
-        ctx.clearRect(0, 0, MASK_W, MASK_H)
-        fillPolygon(ctx, poly, '#fff')
-        softenCanvas(ctx, 4)
-        this.hoverTexture.needsUpdate = true
+  setHover(shape: readonly Polygon[] | null, tint: readonly [number, number, number] = [1, 1, 1]): void {
+    if (shape) {
+      const masks = [
+        [this.hoverCanvas, this.hoverTexture, 4],
+        [this.outlineCanvas, this.outlineTexture, 1],
+      ] as const
+      for (const [canvas, texture, soften] of masks) {
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        for (const poly of shape) fillPolygon(ctx, poly, '#fff')
+        softenCanvas(ctx, soften)
+        texture.needsUpdate = true
       }
       ;(this.uniforms.uHoverTint!.value as Vector3).set(tint[0], tint[1], tint[2])
     }
-    this.hoverGoal = poly ? 1 : 0
+    this.hoverGoal = shape ? 1 : 0
+    this.dirty = true
+  }
+
+  /** Call after redrawing the deck's canvas. */
+  refreshDeck(): void {
+    this.deckTexture.needsUpdate = true
+    this.dirty = true
+  }
+
+  /** Call after redrawing the board canvas. */
+  refreshInfo(): void {
+    this.infoTexture.needsUpdate = true
     this.dirty = true
   }
 
@@ -421,7 +485,6 @@ export class RoomRenderer {
     this.camera.projectionMatrix.makePerspective(f.left, f.right, f.top, f.bottom, NEAR, 100)
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert()
     this.renderer.render(this.scene, this.camera)
-
     const info: FrameInfo = { view, width: this.width, height: this.height, moving: this.moving }
     for (const cb of this.listeners) cb(info)
   }

@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { AREAS, areaById, LAMP, SCREENS, type AreaId } from '../areas'
-import { hitPolygon, hitTest, sameHit, type Hit } from '../hit'
+import { AREAS, areaById, LAMP, MONITOR_SCREEN, SCREENS, TOP_SCREEN, type AreaId } from '../areas'
+import { player } from '../audio/player'
+import { BOARD_H, BOARD_W, drawBoard } from '../now/board'
+import { getNow, startNow, subscribeNow } from '../now/now'
+import { hitOutline, hitTest, sameHit, type Hit } from '../hit'
+import { DECK_RECT, DeckArt, type DeckTarget } from '../scene/deckArt'
 import { RoomRenderer } from '../scene/RoomRenderer'
 import { maxPan } from '../scene/view'
 import { attachRenderer, closeArea, getPan, openArea, setPan, setReducedMotion } from '../state/controller'
@@ -13,6 +17,8 @@ export interface RoomAssets {
   depth: HTMLImageElement
   blur1: HTMLImageElement
   blur2: HTMLImageElement
+  /** A sharper copy of the tape deck's corner of the room. */
+  player: HTMLImageElement
 }
 
 const DRAG_THRESHOLD = 8
@@ -28,8 +34,69 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
-    const r = new RoomRenderer(host, assets.room, assets.depth, [assets.blur1, assets.blur2], { screens: SCREENS, lamp: LAMP })
+    const board = document.createElement('canvas')
+    board.width = BOARD_W
+    board.height = BOARD_H
+    const deck = new DeckArt()
+    const r = new RoomRenderer(host, assets.room, assets.depth, [assets.blur1, assets.blur2], {
+      screens: SCREENS,
+      lamp: LAMP,
+      saver: MONITOR_SCREEN,
+      info: TOP_SCREEN,
+      board,
+      deck: { rect: DECK_RECT, patch: assets.player, art: deck.canvas },
+    })
     const detach = attachRenderer(r)
+
+    // The small CRT: redraw when the minute turns, the weather arrives or the font loads.
+    const paintBoard = () => {
+      drawBoard(board, getNow(), new Date())
+      r.refreshInfo()
+    }
+    let minuteTimer = 0
+    const onMinute = () => {
+      paintBoard()
+      minuteTimer = window.setTimeout(onMinute, 60_000 - (Date.now() % 60_000) + 50)
+    }
+    onMinute()
+    const syncDeck = () => {
+      const s = player.get()
+      const genre = s.loaded === null ? undefined : s.genres[s.loaded]
+      deck.setView({
+        tapes: s.genres.map((g) => g.name),
+        loaded: s.loaded,
+        title: genre?.tapes[s.track]?.title ?? '',
+        trackLabel: genre ? `${s.track + 1}/${genre.tapes.length}` : '',
+        playing: s.playing,
+        at: s.at,
+        of: s.of,
+      })
+    }
+    const unsubPlayer = player.subscribe(syncDeck)
+    syncDeck()
+    void player.init()
+    const deckTargetAt = (x: number, y: number): DeckTarget | null => {
+      if (room.get().area !== 'music' || room.get().moving) return null
+      const px = r.pixelAt(x, y)
+      return px ? deck.targetAt(px[0], px[1]) : null
+    }
+    // The deck is painted into the picture: repaint its canvas while something on it moves.
+    let deckFrame = 0
+    let deckThen = performance.now()
+    const tickDeck = (now: number) => {
+      deckFrame = requestAnimationFrame(tickDeck)
+      const dt = Math.min((now - deckThen) / 1000, 0.1)
+      deckThen = now
+      if (deck.update(dt, room.get().area === 'music')) r.refreshDeck()
+    }
+    deckFrame = requestAnimationFrame(tickDeck)
+
+    void document.fonts.ready.then(() => {
+      paintBoard()
+      deck.redraw()
+    })
+    const unsubNow = subscribeNow(paintBoard)
+    const stopNow = startNow()
     r.setLamp(room.get().lamp)
     r.setRain(room.get().rain ? 1 : 0)
 
@@ -51,7 +118,7 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       if (sameHit(hit, hovered)) return
       hovered = hit
       host.dataset.hot = hit ? 'true' : 'false'
-      r.setHover(hit ? hitPolygon(hit) : null, hit?.kind === 'area' ? areaById(hit.id).tint : [1, 1, 1])
+      r.setHover(hit ? hitOutline(hit) : null, hit?.kind === 'area' ? areaById(hit.id).tint : [1, 1, 1])
       room.set({ hovered: hit?.kind === 'area' ? hit.id : null })
     }
 
@@ -79,6 +146,12 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       if (e.pointerType === 'mouse') {
         const rect = host.getBoundingClientRect()
         r.setPointer(((e.clientX - rect.left) / rect.width) * 2 - 1, ((e.clientY - rect.top) / rect.height) * 2 - 1)
+        if (room.get().area === 'music') {
+          const target = deckTargetAt(e.clientX, e.clientY)
+          deck.setHover(target)
+          host.dataset.hot = target ? 'true' : 'false'
+          return
+        }
         setHovered(hitAt(e.clientX, e.clientY))
         return
       }
@@ -106,7 +179,13 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       if (!drag || drag.id !== e.pointerId) return
       const wasDrag = drag.moved
       drag = null
-      if (!wasDrag) activate(hitAt(e.clientX, e.clientY))
+      if (wasDrag) return
+      const target = deckTargetAt(e.clientX, e.clientY)
+      if (target?.kind === 'tape') player.load(target.index)
+      else if (target) {
+        deck.tap(target.key)
+        player.press(target.key)
+      } else activate(hitAt(e.clientX, e.clientY))
     }
 
     const onLeave = (e: PointerEvent) => {
@@ -118,6 +197,7 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
     const unsub = room.subscribe(() => {
       // Leaving the overview clears hover; returning restores it on the next move.
       if (room.get().area && hovered) setHovered(null)
+      if (room.get().area !== 'music') deck.setHover(null)
     })
 
     // Idle tour. On mouse-driven screens, after a few quiet seconds, light up one object
@@ -150,7 +230,7 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
       }
       const a = AREAS[tourIndex++ % AREAS.length]!
       tourShown = a.id
-      r.setHover(a.hotspot, a.tint)
+      r.setHover(a.outline, a.tint)
       room.set({ hovered: a.id })
       tourTimer = window.setTimeout(() => {
         clearTourHighlight()
@@ -176,6 +256,11 @@ export function RoomStage({ assets }: { assets: RoomAssets }) {
     host.addEventListener('pointerleave', onLeave)
 
     return () => {
+      window.clearTimeout(minuteTimer)
+      unsubPlayer()
+      cancelAnimationFrame(deckFrame)
+      unsubNow()
+      stopNow()
       window.clearTimeout(idleTimer)
       window.clearTimeout(tourTimer)
       for (const ev of activityEvents) window.removeEventListener(ev, onActivity, { capture: true })

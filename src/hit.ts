@@ -1,4 +1,4 @@
-import { areaById, HIT_ORDER, LAMP, TABLET, type AreaId } from './areas'
+import { areaById, HIT_ORDER, LAMP, LAMP_OUTLINE, TABLET, TABLET_OUTLINE, type AreaId } from './areas'
 import { pointInPolygon, type Polygon } from './scene/polygon'
 
 export type Hit = { kind: 'area'; id: AreaId } | { kind: 'lamp' } | { kind: 'tablet' }
@@ -13,10 +13,11 @@ export function hitTest(px: number, py: number): Hit | null {
   return null
 }
 
-export function hitPolygon(hit: Hit): Polygon {
-  if (hit.kind === 'lamp') return LAMP
-  if (hit.kind === 'tablet') return TABLET
-  return areaById(hit.id).hotspot
+/** The silhouette to light up for a hit. */
+export function hitOutline(hit: Hit): readonly Polygon[] {
+  if (hit.kind === 'lamp') return LAMP_OUTLINE
+  if (hit.kind === 'tablet') return TABLET_OUTLINE
+  return areaById(hit.id).outline
 }
 
 export function sameHit(a: Hit | null, b: Hit | null): boolean {

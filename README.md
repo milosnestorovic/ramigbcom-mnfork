@@ -47,10 +47,14 @@ If you replace the room image, redo the hotspot outlines and `MONITOR_SCREEN` in
 Drop MP3s into `public/audio/` and list them in `public/audio/tracks.json`:
 
 ```json
-[{ "title": "Night shift", "src": "night-shift.mp3" }]
+[{ "title": "Night shift", "src": "night-shift.mp3", "genre": "Lo-fi" }]
 ```
 
-A small tape player appears in the corner when the file exists. It never autoplays.
+Each genre becomes one cassette case in the stack on the painted player (right-hand
+shelves). Nothing replaces the artwork: `src/scene/deckArt.ts` draws the stack and an old
+cassette deck's face (door, keys, VU meters, readout, counter) onto that patch of the picture, and `public/scene/player.webp` is a
+sharper copy of the patch for the close-up. Click the player to come close, click a spine
+to load it. The Music button in the corner goes there too. It never autoplays.
 The rain/hum ambience is generated in the browser and is also opt-in.
 
 ## Deploy

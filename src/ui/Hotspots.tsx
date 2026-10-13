@@ -12,7 +12,7 @@ export function HotspotNav() {
   const area = useRoom((s) => s.area)
   const highlight = (id: AreaId | null) => {
     const a = id ? areaById(id) : null
-    getRenderer()?.setHover(a?.hotspot ?? null, a?.tint)
+    getRenderer()?.setHover(a?.outline ?? null, a?.tint)
     room.set({ hovered: id })
   }
   return (

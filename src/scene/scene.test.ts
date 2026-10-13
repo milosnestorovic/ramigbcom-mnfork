@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AREAS, MONITOR_SCREEN } from '../areas'
-import { mapPoint } from './homography'
+import { mapPoint, quadToUnitSquare } from './homography'
 import { pickPixel } from './pick'
 import { IMAGE_ASPECT, IMAGE_H, IMAGE_W, pixelToWorld, worldToPixel } from './space'
 import { framedView, lerpView, overviewView, projectToScreen, withParallax } from './view'
@@ -151,6 +151,21 @@ describe('homography', () => {
       const [mx, my] = mapPoint(w, h, quad, x, y)
       expect(mx).toBeCloseTo(quad[i]![0], 3)
       expect(my).toBeCloseTo(quad[i]![1], 3)
+    })
+  })
+
+  it('maps the quad back onto the unit square', () => {
+    const m = quadToUnitSquare(MONITOR_SCREEN)
+    const unit = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ] as const
+    MONITOR_SCREEN.forEach(([x, y], i) => {
+      const w = m[6]! * x + m[7]! * y + m[8]!
+      expect((m[0]! * x + m[1]! * y + m[2]!) / w).toBeCloseTo(unit[i]![0], 3)
+      expect((m[3]! * x + m[4]! * y + m[5]!) / w).toBeCloseTo(unit[i]![1], 3)
     })
   })
 })

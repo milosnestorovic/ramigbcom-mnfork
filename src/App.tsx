@@ -24,8 +24,11 @@ export function App() {
   useEffect(() => {
     let alive = true
     const slowTimer = window.setTimeout(() => alive && setSlow(true), 600)
-    Promise.all(['/scene/room.webp', '/scene/depth.png', '/scene/blur1.webp', '/scene/blur2.webp'].map(loadImage))
-      .then(([room, depth, blur1, blur2]) => alive && room && depth && blur1 && blur2 && setAssets({ room, depth, blur1, blur2 }))
+    Promise.all(['/scene/room.webp', '/scene/depth.png', '/scene/blur1.webp', '/scene/blur2.webp', '/scene/player.webp'].map(loadImage))
+      .then(
+        ([room, depth, blur1, blur2, player]) =>
+          alive && room && depth && blur1 && blur2 && player && setAssets({ room, depth, blur1, blur2, player }),
+      )
       .catch(() => alive && setFailed(true))
     return () => {
       alive = false

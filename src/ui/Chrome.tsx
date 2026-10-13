@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import { Ambience } from '../audio/ambience'
-import { loadTapes, type Tape } from '../audio/tapes'
 import { profile } from '../content/profile'
 import { closeArea } from '../state/controller'
 import { room, useRoom } from '../state/store'
 import { Help } from './Help'
+import { TapeButton } from './Music'
 import { useFrame } from './useScene'
 
 const HINT_KEY = 'room.explored'
@@ -66,7 +65,7 @@ export function Chrome() {
       </div>
 
       <div className="chrome__bottom-right">
-        <TapeDeck />
+        <TapeButton />
         <SoundToggle />
       </div>
 
@@ -94,68 +93,6 @@ function SoundToggle() {
       </span>
       {sound ? 'Rain on' : 'Sound off'}
     </button>
-  )
-}
-
-function TapeDeck() {
-  const [tapes, setTapes] = useState<Tape[]>([])
-  const [index, setIndex] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const audioRef = useRef<HTMLAudioElement>(null)
-
-  useEffect(() => {
-    let alive = true
-    void loadTapes().then((t) => alive && setTapes(t))
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  const tape = tapes[index]
-  if (!tape) return null
-
-  const play = (a: HTMLAudioElement) =>
-    void a.play().then(
-      () => setPlaying(true),
-      () => setPlaying(false),
-    )
-
-  const toggle = () => {
-    const a = audioRef.current
-    if (!a) return
-    if (a.paused) play(a)
-    else {
-      a.pause()
-      setPlaying(false)
-    }
-  }
-
-  // Commit the new src synchronously so play() runs inside the click's user gesture
-  // (autoplay policies, iOS especially, reject play() from a later tick).
-  const next = () => {
-    flushSync(() => setIndex((i) => (i + 1) % tapes.length))
-    const a = audioRef.current
-    if (a) play(a)
-  }
-
-  return (
-    <div className="tape">
-      <audio
-        ref={audioRef}
-        src={tape.src}
-        preload="none"
-        onEnded={next}
-      />
-      <button type="button" className="control" aria-pressed={playing} onClick={toggle}>
-        <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span>
-        <span className="tape__title">{tape.title}</span>
-      </button>
-      {tapes.length > 1 && (
-        <button type="button" className="control control--icon" aria-label="Next track" onClick={next}>
-          <span aria-hidden="true">&#8250;</span>
-        </button>
-      )}
-    </div>
   )
 }
 

@@ -83,10 +83,10 @@ await page.waitForTimeout(400)
 check('clicking the lamp shows its toast', (await page.locator('.toast').count()) === 1)
 
 // Deep link + Escape.
-await page.goto(base + '/skills', { waitUntil: 'networkidle' })
+await page.goto(base + '/music', { waitUntil: 'networkidle' })
 await page.waitForSelector('.chrome[data-ready="true"]')
 await page.waitForTimeout(1200)
-check('deep link /skills opens skills', (await page.locator('.shelf-group').count()) === 3)
+check('deep link /music opens the tape deck', (await page.locator('#music-title').count()) === 1)
 await page.keyboard.press('Escape')
 await page.waitForTimeout(1600)
 check('Escape from a deep link goes to /', path() === '/')

@@ -21,8 +21,6 @@ const BOOTED_KEY = 'room.booted'
 
 type Quad = [Point, Point, Point, Point]
 
-/** How far the terminal straightens up once the camera has arrived (0 = exact perspective). */
-const FLATTEN_AT_REST = 0.75
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
 /** The CRT glass on screen. Each corner uses its own depth so it lines up with the plate. */
@@ -36,9 +34,8 @@ function quadSize([tl, tr, br, bl]: Quad): { w: number; h: number } {
 }
 
 /**
- * Pull a quad toward the upright rectangle with the same center and size. The CRT
- * faces up and to the right, which tilts text by 10-18 degrees; straightening it
- * most of the way keeps it seated in the screen but readable.
+ * Pull a quad toward the upright rectangle with the same center and size. Only
+ * phones use it: everywhere else the terminal sits exactly in the CRT's glass.
  */
 function flatten(q: Quad, t: number): Quad {
   const cx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4
@@ -135,7 +132,7 @@ export function Terminal() {
     const el = crtRef.current
     if (!el) return
     // Phones get a fully upright screen: there's no spare resolution for perspective.
-    const goal = f.moving ? 0 : f.width < f.height ? 1 : FLATTEN_AT_REST
+    const goal = !f.moving && f.width < f.height ? 1 : 0
     flat.current = reducedMotion.matches ? goal : flat.current + (goal - flat.current) * 0.12
     const quad = flatten(screenQuad(r, (x, y, d) => r.project(x, y, d)), flat.current)
     el.style.transform = quadToMatrix3d(size.w, size.h, quad)
@@ -181,7 +178,6 @@ export function Terminal() {
       <div
         ref={crtRef}
         className="crt"
-        data-arrived={!moving}
         style={{ width: size.w, height: size.h, ['--crt-w' as string]: `${size.w}px` }}
         onClick={(e) => {
           if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('crt__log')) inputRef.current?.focus()

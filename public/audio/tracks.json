@@ -1,5 +1,5 @@
 [
-  { "title": "Study, Rainy Night — Alex Morgan", "src": "alex-morgan-lofi-study-rainy-night-568166.mp3" },
-  { "title": "Moon Light — Ornave", "src": "ornave-lofi-moon-light-553399.mp3" },
-  { "title": "Relaxing — Velario Music", "src": "velariomusic-lofi-relaxing-598427.mp3" }
+  { "title": "Study, Rainy Night — Alex Morgan", "src": "alex-morgan-lofi-study-rainy-night-568166.mp3", "genre": "Lo-fi study" },
+  { "title": "Moon Light — Ornave", "src": "ornave-lofi-moon-light-553399.mp3", "genre": "Lo-fi night" },
+  { "title": "Relaxing — Velario Music", "src": "velariomusic-lofi-relaxing-598427.mp3", "genre": "Lo-fi chill" }
 ]

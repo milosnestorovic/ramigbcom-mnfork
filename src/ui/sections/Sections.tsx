@@ -3,9 +3,10 @@ import { experiments } from '../../content/experiments'
 import { hobbies } from '../../content/hobbies'
 import { about } from '../../content/profile'
 import { useRoom } from '../../state/store'
+import { Music } from '../Music'
 import { Contact } from './Contact'
+import { Now } from './Now'
 import { Panel } from './Panel'
-import { Skills } from './Skills'
 import { Terminal } from './terminal/Terminal'
 
 export function SectionLayer() {
@@ -14,10 +15,11 @@ export function SectionLayer() {
   const a = areaById(area)
   return (
     <div className="sections" key={area}>
+      {area === 'now' && <Now />}
       {area === 'projects' && <Terminal />}
       {area === 'about' && <About area={a} />}
       {area === 'hobbies' && <Hobbies area={a} />}
-      {area === 'skills' && <Skills area={a} />}
+      {area === 'music' && <Music />}
       {area === 'contact' && <Contact />}
       {area === 'experiments' && <Experiments area={a} />}
     </div>

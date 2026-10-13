@@ -10,7 +10,7 @@ import { chromium } from 'playwright'
 const base = process.env.QA_URL ?? 'http://127.0.0.1:5173'
 const out = 'qa-screens'
 const ALL_SIZES = ['1920x1080', '1440x900', '1366x768', '1024x768', '390x844', '375x667']
-const ALL_ROUTES = ['/', '/projects', '/about', '/hobbies', '/skills', '/contact', '/experiments']
+const ALL_ROUTES = ['/', '/now', '/projects', '/about', '/hobbies', '/music', '/contact', '/experiments']
 
 const args = process.argv.slice(2)
 const routes = args.filter((a) => a.startsWith('/'))

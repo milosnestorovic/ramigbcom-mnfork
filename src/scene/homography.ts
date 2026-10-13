@@ -28,6 +28,18 @@ export function quadToMatrix3d(w: number, h: number, quad: readonly [Point, Poin
   return `matrix3d(${m.map((n) => +n.toFixed(9)).join(',')})`
 }
 
+/**
+ * The reverse: a 3x3 matrix (row-major) taking a point inside the quad back to the
+ * unit square, up to scale. The room shader uses it to draw onto the CRT's glass.
+ */
+export function quadToUnitSquare(quad: readonly [Point, Point, Point, Point]): number[] {
+  const m = quadToMatrix3d(1, 1, quad).slice(9, -1).split(',').map(Number)
+  const at = (i: number) => m[i] ?? 0
+  const [a, b, c, d, e, f, g, h] = [at(0), at(4), at(12), at(1), at(5), at(13), at(3), at(7)]
+  // Adjugate of [[a, b, c], [d, e, f], [g, h, 1]].
+  return [e - f * h, c * h - b, b * f - c * e, f * g - d, a - c * g, c * d - a * f, d * h - e * g, b * g - a * h, a * e - b * d]
+}
+
 /** Apply the same mapping to a point, for tests. */
 export function mapPoint(w: number, h: number, quad: readonly [Point, Point, Point, Point], x: number, y: number): Point {
   const m = quadToMatrix3d(w, h, quad).slice(9, -1).split(',').map(Number)

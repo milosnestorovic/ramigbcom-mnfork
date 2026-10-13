@@ -14,7 +14,7 @@ void main() {
 
 /*
  * Everything the room does on top of the source image happens here, in one pass:
- * depth-of-field from pre-blurred plates, the hover light lift, screen glow,
+ * depth-of-field from pre-blurred plates, the CRT's screensaver, the tape deck's controls, the hover light lift and outline, screen glow,
  * twinkling city lights, the lamp easter egg, rain behind the glass and a vignette.
  * Colors stay in the image's own (sRGB) space so the overview is untouched.
  */
@@ -25,6 +25,14 @@ uniform sampler2D uMap;
 uniform sampler2D uDepth;
 uniform sampler2D uFx;
 uniform sampler2D uHover;
+uniform sampler2D uOutline;
+uniform mat3 uSaver;
+uniform mat3 uInfo;
+uniform sampler2D uInfoMap;
+uniform sampler2D uPatch;
+uniform sampler2D uDeck;
+uniform vec4 uDeckRect;
+uniform vec2 uImageSize;
 uniform sampler2D uBlur1;
 uniform sampler2D uBlur2;
 uniform float uStretch;
@@ -59,6 +67,40 @@ float rainLayer(vec2 uv, float columns, float speed, float seed) {
   return streak * thin * step(0.62, hash(vec2(col, seed + 3.7)));
 }
 
+// The CRT's screensaver: falling columns of made-up glyphs. s is the glass, 0..1.
+vec3 screensaver(vec2 s, float t) {
+  vec2 grid = vec2(13.0, 10.0);
+  vec2 cell = floor(s * grid);
+  vec2 f = fract(s * grid);
+  float len = 7.0 + 9.0 * hash(vec2(cell.x, 3.0));
+  float speed = 1.5 + 4.0 * hash(vec2(cell.x, 1.0));
+  float head = mod(t * speed + 40.0 * hash(vec2(cell.x, 2.0)), grid.y + len);
+  float behind = head - cell.y;
+  float trail = step(0.0, behind) * clamp(1.0 - behind / len, 0.0, 1.0);
+  float lead = step(0.0, behind) * step(behind, 1.0);
+  // Each cell holds a 3x5 dot glyph that reshuffles now and then.
+  float glyph = hash(cell + 0.37 * floor(t * (0.6 + 2.4 * hash(cell))));
+  vec2 pip = floor(f * vec2(4.0, 6.0));
+  float lit = step(0.45, hash(pip + glyph * 91.7)) * step(pip.x, 2.5) * step(pip.y, 4.5);
+  vec3 c = vec3(0.015, 0.07, 0.08);
+  c += vec3(0.2, 0.9, 0.85) * lit * trail * trail;
+  c += vec3(0.75, 1.0, 1.0) * lit * lead;
+  vec2 q = s - 0.5;
+  return c * (1.0 - 1.6 * dot(q, q));
+}
+
+// Where an image pixel falls on a screen's glass (0..1 inside it).
+vec2 onGlass(mat3 m, vec2 uv) {
+  vec3 p = m * vec3(uv * uImageSize, 1.0);
+  return p.xy / p.z;
+}
+
+// 1 inside the glass, with corners rounded like the tube.
+float glassMask(vec2 s) {
+  vec2 corner = abs(s - 0.5) - 0.43;
+  return 1.0 - smoothstep(-0.015, 0.0, length(max(corner, 0.0)) - 0.07);
+}
+
 void main() {
   vec2 uv = vUv;
   float disparity = texture2D(uDepth, clamp(uv, 0.0, 1.0)).r;
@@ -70,11 +112,34 @@ void main() {
   // pixels that were never photographed. Blur them away once the camera has moved.
   float soft = max(coc, smoothstep(0.2, 0.7, vEdge) * uStretch);
   vec3 col = texture2D(uMap, uv).rgb;
+  // The tape deck's corner of the picture has a sharper copy for close-ups, feathered in.
+  vec2 dq = (uv - uDeckRect.xy) / (uDeckRect.zw - uDeckRect.xy);
+  vec2 dEdge = smoothstep(0.0, 0.07, dq) * smoothstep(0.0, 0.07, 1.0 - dq);
+  float inDeck = dEdge.x * dEdge.y;
+  col = mix(col, texture2D(uPatch, clamp(dq, 0.0, 1.0)).rgb, inDeck);
   if (soft > 0.01) {
     vec3 b1 = texture2D(uBlur1, uv).rgb;
     vec3 b2 = texture2D(uBlur2, uv).rgb;
     col = soft < 0.5 ? mix(col, b1, soft * 2.0) : mix(b1, b2, soft * 2.0 - 1.0);
   }
+
+  // Both CRTs show something live in place of the painted glass. Out of focus,
+  // either one melts into a glow.
+  vec3 glow = vec3(0.03, 0.13, 0.13);
+  float melt = clamp(soft * 1.6, 0.0, 1.0);
+  vec2 gs = onGlass(uSaver, uv);
+  float inSaver = glassMask(gs);
+  if (inSaver > 0.0) {
+    // Frozen on one frame for reduced motion.
+    col = mix(col, mix(screensaver(gs, mix(7.0, uTime, uMotion)), glow, melt), inSaver);
+  }
+  vec2 is = onGlass(uInfo, uv);
+  // Sampled outside the branch: mip selection needs derivatives everywhere.
+  vec3 board = texture2D(uInfoMap, clamp(is, 0.0, 1.0)).rgb;
+  col = mix(col, mix(board, glow, melt), glassMask(is));
+  // What is drawn onto the deck: its display, keys, slot and the stack of cassettes.
+  vec4 art = texture2D(uDeck, clamp(dq, 0.0, 1.0)) * inDeck * (1.0 - melt);
+  col = col * (1.0 - art.a) + art.rgb;
 
   // Hover: lift the object, let everything else settle back a touch.
   float h = texture2D(uHover, uv).r * uHoverAmt;
@@ -107,6 +172,12 @@ void main() {
     col = mix(col, vec3(0.13, 0.18, 0.21), 0.07 * uRain * city);
     col += vec3(0.62, 0.74, 0.82) * rain * 0.22 * uRain * city;
   }
+
+  // Hover outline: the silhouette mask crosses one half at the object's edge. Measured
+  // in screen pixels, so the line stays hair-thin however far the camera zooms in.
+  float outline = texture2D(uOutline, uv).r;
+  float edge = abs(outline - 0.5) / max(fwidth(outline), 1e-4);
+  col = mix(col, uHoverTint, (1.0 - smoothstep(0.4, 1.1, edge)) * uHoverAmt * 0.8);
 
   vec2 q = gl_FragCoord.xy / uResolution - 0.5;
   col *= 1.0 - dot(q, q) * uVignette;
